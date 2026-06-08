@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mapa da Chácara</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="toolbar">
+  <button class="tb-btn active" id="btn-select" onclick="setTool('select')" title="Selecionar (S)">&#9654; Selecionar</button>
+  <button class="tb-btn" id="btn-draw" onclick="setTool('draw')" title="Desenhar polígono (D)">&#9670; Desenhar</button>
+  <button class="tb-btn" id="btn-drawCircle" onclick="setTool('drawCircle')" title="Desenhar círculo por diâmetro (C)">&#9711; Círculo</button>
+  <button class="tb-btn" id="btn-pan" onclick="setTool('pan')" title="Mover mapa (P / Espaço)">&#10021; Mover</button>
+
+  <div class="tb-sep"></div>
+
+  <div class="tab-group">
+    <button class="tb-btn active" id="tab-atual" onclick="toggleLayer('atual')">Atual</button>
+    <button class="tb-btn active" id="tab-futuro" onclick="toggleLayer('futuro')">Futuro</button>
+    <button class="tb-btn active" id="tab-construcao" onclick="toggleLayer('construcao')">Construção</button>
+    <button class="tb-btn active" id="tab-arvores" onclick="toggleLayer('arvores')">Árvores</button>
+  </div>
+
+  <div class="tb-sep"></div>
+
+  <button class="tb-btn" onclick="saveToJSON()" title="Salvar como chacara.json">&#128190; Salvar</button>
+  <button class="tb-btn" onclick="triggerLoad()" title="Carregar arquivo JSON">&#128194; Carregar</button>
+  <input type="file" id="file-load" accept=".json" style="display:none" onchange="loadFromJSON(this)">
+  <button class="tb-btn" onclick="document.getElementById('file-reload').click()" title="Recarregar chacara.json e comparar com dados locais">&#8635; JSON</button>
+  <input type="file" id="file-reload" accept=".json" style="display:none" onchange="reloadFromJSONFile(this)">
+
+  <button class="tb-btn" onclick="triggerSatellite()" title="Carregar foto de satélite PNG">&#128248; Satélite</button>
+  <input type="file" id="file-satellite" accept=".png,.jpg,.jpeg,.webp,.gif,.bmp,image/*" style="display:none" onchange="loadSatelliteImage(this)">
+
+  <button class="tb-btn" onclick="fitView()" title="Ajustar vista à propriedade">&#8982; Ajustar</button>
+
+  <span id="coord-display">—</span>
+</div>
+
+<div id="main">
+  <div id="canvas-wrap">
+    <canvas id="canvas"></canvas>
+    <div id="kb-hint">
+      <b>S</b> Selecionar &nbsp;|&nbsp; <b>D</b> Polígono &nbsp;|&nbsp; <b>C</b> Círculo &nbsp;|&nbsp; <b>Espaço</b> Mover<br>
+      <b>Scroll</b> Zoom &nbsp;|&nbsp; <b>Del</b> Apagar selecionado<br>
+      <b>2× clique</b> Fechar polígono &nbsp;|&nbsp; <b>Esc</b> Cancelar
+    </div>
+  </div>
+
+  <div id="sidebar">
+    <div class="sb-section" id="sb-polygon">
+      <div class="sb-title">Forma Selecionada</div>
+      <div class="sb-empty" id="sb-empty">Selecione ou desenhe uma forma</div>
+      <div id="sb-form" style="display:none">
+        <div class="sb-row">
+          <label class="sb-label">Nome / Label</label>
+          <input class="sb-input" id="sb-label" type="text" placeholder="ex: Casa principal" oninput="updateSelected('label',this.value)">
+        </div>
+        <div class="sb-row">
+          <label class="sb-label">Categoria</label>
+          <select class="sb-select" id="sb-category" onchange="updateSelected('category',this.value);applyDefaultColor()">
+            <option value="construcao">Construção</option>
+            <option value="arvore">Árvore</option>
+            <option value="arvore_frutifera">Árvore Frutífera</option>
+            <option value="plantio">Plantio</option>
+          </select>
+        </div>
+        <div class="sb-row">
+          <label class="sb-label">Status</label>
+          <select class="sb-select" id="sb-status" onchange="updateSelected('status',this.value)">
+            <option value="existe">Existe</option>
+            <option value="projeto">Projeto</option>
+            <option value="em_construcao">Em construção</option>
+          </select>
+        </div>
+        <div class="sb-row">
+          <label class="sb-label">Camada</label>
+          <select class="sb-select" id="sb-tab" onchange="updateSelected('tab',this.value)">
+            <option value="atual">Atual</option>
+            <option value="futuro">Futuro</option>
+          </select>
+        </div>
+        <div class="sb-row">
+          <label class="sb-label">Cor</label>
+          <div class="sb-row-inline">
+            <input class="sb-color" id="sb-color" type="color" oninput="updateSelected('color',this.value)">
+            <span class="sb-hint">Clique para personalizar</span>
+          </div>
+        </div>
+        <div class="sb-row" id="sb-circle-radius-row" style="display:none">
+          <label class="sb-label">Raio</label>
+          <div class="sb-row-inline">
+            <input class="sb-input" id="sb-radius" type="number" min="0.1" step="0.1" style="width:80px" oninput="updateCircleRadius(this.value)">
+            <span class="sb-hint">metros</span>
+          </div>
+          <div class="sb-hint" id="sb-diameter-hint"></div>
+        </div>
+        <div class="sb-row">
+          <label class="sb-label">Descrição / Notas</label>
+          <textarea class="sb-textarea" id="sb-description" placeholder="Dimensões, materiais, observações..." oninput="updateSelected('description',this.value)"></textarea>
+        </div>
+        <div class="sb-row" style="margin-top:10px">
+          <button class="sb-btn" id="btn-edit-vertices" onclick="enterVertexEdit()">&#9999; Editar vértices</button>
+        </div>
+        <div class="sb-row" style="margin-top:6px">
+          <button class="sb-btn" id="sb-merge-btn" onclick="enterMergeMode()">&#8853; Fundir com outra forma</button>
+          <div class="sb-hint" id="sb-merge-hint" style="display:none;margin-top:3px;color:#2a7a3a">Clique na segunda forma para fundir</div>
+        </div>
+        <div class="sb-row" style="margin-top:6px">
+          <button class="sb-btn danger" onclick="deleteSelected()">&#128465; Apagar esta forma</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sb-section">
+      <div class="sb-title">Satélite</div>
+      <div class="sb-row">
+        <div class="sb-row-inline">
+          <input type="checkbox" id="sat-visible" onchange="state.satellite.visible=this.checked;scheduleRender()">
+          <label for="sat-visible" style="cursor:pointer">Visível</label>
+        </div>
+      </div>
+      <div class="sb-row">
+        <label class="sb-label">Opacidade</label>
+        <input class="sb-range" type="range" id="sat-opacity" min="0" max="1" step="0.05" value="0.5"
+          oninput="state.satellite.opacity=parseFloat(this.value);scheduleRender()">
+      </div>
+      <button class="sb-btn" onclick="triggerSatellite()" style="margin-top:4px">&#128248; Carregar imagem (PNG/JPG...)</button>
+      <button class="sb-btn danger" id="sat-remove" style="margin-top:4px;display:none" onclick="removeSatellite()">&#10005; Remover satélite</button>
+    </div>
+
+    <div class="sb-section">
+      <div class="sb-title">Grade (30cm/célula)</div>
+      <div class="sb-row-inline">
+        <div>
+          <label class="sb-label">Colunas</label>
+          <input class="sb-input" id="grid-cols" type="number" value="133" min="10" max="2000" style="width:66px" oninput="updateGridHint()">
+        </div>
+        <div>
+          <label class="sb-label">Linhas</label>
+          <input class="sb-input" id="grid-rows" type="number" value="167" min="10" max="2000" style="width:66px" oninput="updateGridHint()">
+        </div>
+      </div>
+      <button class="sb-btn" onclick="applyGridSize()" style="margin-top:6px">Aplicar</button>
+      <div class="sb-hint" id="grid-size-hint">50.1m × 39.9m ≈ 2000m²</div>
+    </div>
+
+    <div class="sb-section">
+      <div class="sb-title">Legenda</div>
+      <div id="legend-list"><div class="sb-empty">Nenhum polígono ainda</div></div>
+    </div>
+  </div>
+</div>
+
+<script src="js/state.js"></script>
+<script src="js/coords.js"></script>
+<script src="js/render.js"></script>
+<script src="js/hitTest.js"></script>
+<script src="js/shapes.js"></script>
+<script src="js/merge.js"></script>
+<script src="js/tools.js"></script>
+<script src="js/sidebar.js"></script>
+<script src="js/satellite.js"></script>
+<script src="js/persistence.js"></script>
+<script src="js/events.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

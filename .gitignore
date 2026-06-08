@@ -1,0 +1,36 @@
+
+#Deault save item
+chacara.json
+
+
+
+
+
+
+
+
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+
+# Editors
+.vscode/
+.idea/
+*.sublime-workspace
+*.suo
+*.user
+
+# Claude Code
+.claude/
+
+# Logs
+*.log
+
+# Temp
+*.tmp
+*.bak
+*.swp
+*~
